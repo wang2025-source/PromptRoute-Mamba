@@ -184,15 +184,13 @@ The remaining paper figures are shown below in a full-width, single-column layou
 ```text
 PromptRoute-Mamba/
 ├── assets/figures/      # complete paper figure gallery
-├── paper_figures/       # scripts used for paper analysis figures
 ├── utils/               # data, losses, metrics, and image I/O
 ├── dataprocessing.py    # paired patch preparation
 ├── net.py               # PromptRoute-Mamba architecture
 ├── train.py             # two-stage optimization
 ├── test_IVF.py          # inference and evaluation
 ├── test_MIF.py          # medical-fusion evaluation inherited from CDDFuse
-├── environment.yaml
-└── requirements.txt
+└── environment.yaml
 ```
 
 Datasets, checkpoints, logs, TensorBoard runs, caches, and generated results are intentionally excluded from version control.
