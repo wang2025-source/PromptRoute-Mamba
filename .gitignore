@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Environments and editors
+.env
+.venv/
+venv/
+.idea/
+.vscode/
+
+# Datasets, checkpoints, logs, and generated outputs
+data/
+datasets/
+MSRS_train/
+test_img/
+models/
+checkpoints/
+runs/
+logs/
+outputs/
+test_result/
+*.h5
+*.hdf5
+*.pth
+*.pt
+*.ckpt
+*.npy
+*.npz
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
