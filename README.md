@@ -67,41 +67,31 @@ Please follow the license and citation requirements provided by each dataset own
 
 ### 1. Prepare aligned HDF5 patches
 
+Set `IR_files` and `VIS_files` in `dataprocessing.py` to the MSRS training folders, then run:
+
 ```bash
-python dataprocessing.py \
-  --ir-dir /path/to/MSRS/train/ir \
-  --vi-dir /path/to/MSRS/train/vi \
-  --output data/MSRS_train_imgsize_256_stride_100.h5 \
-  --patch-size 256 \
-  --stride 100
+python dataprocessing.py
 ```
 
 ### 2. Run two-stage training
 
+Set the HDF5 path in `train.py` to the file generated above. Training parameters such as `num_epochs`, `epoch_gap`, and `batch_size` are defined at the top of the script.
+
 ```bash
-python train.py \
-  --data data/MSRS_train_imgsize_256_stride_100.h5 \
-  --epochs 12 \
-  --stage1-epochs 4 \
-  --batch-size 2 \
-  --device cuda
+python train.py
 ```
 
 During epochs 1-4, the shared encoder and decoder learn base-detail decomposition and reconstruction. During epochs 5-12, they are frozen while the base and detail fusion modules are optimized. Checkpoints are saved under `models/`; TensorBoard events are written to `runs/`.
 
 ## Testing
 
-Place paired test images under `test/ir` and `test/vi` with identical filenames, then run:
+Place paired test images under `test/ir` and `test/vi` with identical filenames. Set `ckpt_path` and `test_folder` in `test_IVF.py`, then run:
 
 ```bash
-python test_IVF.py \
-  --checkpoint models/PromptRoute-Mamba_XX-XX-XX-XX.pth \
-  --input-dir /path/to/MSRS/test \
-  --output-dir test_result/MSRS \
-  --device cuda
+python test_IVF.py
 ```
 
-The script saves fused PNG images and reports EN, SD, SF, MI, SCD, VIF, Qabf, and SSIM. Add `--no-metrics` when only fused images are needed.
+The script saves fused PNG images under `test_result/MSRS` and reports EN, SD, SF, MI, SCD, VIF, Qabf, and SSIM.
 
 ## Key Experimental Results
 
@@ -194,11 +184,13 @@ The remaining paper figures are shown below in a full-width, single-column layou
 ```text
 PromptRoute-Mamba/
 ├── assets/figures/      # complete paper figure gallery
+├── paper_figures/       # scripts used for paper analysis figures
 ├── utils/               # data, losses, metrics, and image I/O
 ├── dataprocessing.py    # paired patch preparation
 ├── net.py               # PromptRoute-Mamba architecture
 ├── train.py             # two-stage optimization
 ├── test_IVF.py          # inference and evaluation
+├── test_MIF.py          # medical-fusion evaluation inherited from CDDFuse
 ├── environment.yaml
 └── requirements.txt
 ```

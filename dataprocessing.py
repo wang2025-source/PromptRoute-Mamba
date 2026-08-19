@@ -1,91 +1,101 @@
-"""Build an HDF5 training set from aligned infrared/visible image pairs."""
-
-import argparse
-from pathlib import Path
-
+import os
 import h5py
 import numpy as np
-from skimage.io import imread
 from tqdm import tqdm
+from skimage.io import imread
+
+def get_img_file(file_name):
+    imagelist = []
+    for parent, dirnames, filenames in os.walk(file_name):
+        for filename in filenames:
+            if filename.lower().endswith(('.bmp', '.dib', '.png', '.jpg', '.jpeg', '.pbm', '.pgm', '.ppm', '.tif', '.tiff', '.npy')):
+                imagelist.append(os.path.join(parent, filename))
+    return imagelist  
+
+def rgb2y(img):
+    y = img[0:1, :, :] * 0.299000 + img[1:2, :, :] * 0.587000 + img[2:3, :, :] * 0.114000
+    return y
+
+def Im2Patch(img, win, stride=1):
+    k = 0
+    endc = img.shape[0]
+    endw = img.shape[1]
+    endh = img.shape[2]
+    patch = img[:, 0:endw-win+0+1:stride, 0:endh-win+0+1:stride]
+    TotalPatNum = patch.shape[1] * patch.shape[2]
+    Y = np.zeros([endc, win*win,TotalPatNum], np.float32)
+    for i in range(win):
+        for j in range(win):
+            patch = img[:,i:endw-win+i+1:stride,j:endh-win+j+1:stride]
+            Y[:,k,:] = np.array(patch[:]).reshape(endc, TotalPatNum)
+            k = k + 1
+    return Y.reshape([endc, win, win, TotalPatNum])
+
+def is_low_contrast(image, fraction_threshold=0.1, lower_percentile=10,
+                    upper_percentile=90):
+    """Determine if an image is low contrast."""
+    limits = np.percentile(image, [lower_percentile, upper_percentile])
+    
+    if limits[1] == 0:
+        return True 
+    ratio = (limits[1] - limits[0]) / limits[1]
+    return ratio < fraction_threshold
+
+data_name="MSRS_train"
+img_size=256   #patch size
+stride=100     #patch stride
 
 
-IMAGE_SUFFIXES = {".bmp", ".dib", ".png", ".jpg", ".jpeg", ".pbm", ".pgm", ".ppm", ".tif", ".tiff", ".npy"}
+IR_files = sorted(get_img_file(r"/root/autodl-tmp/MSRS-main/train/ir"))
+VIS_files   = sorted(get_img_file(r"/root/autodl-tmp/MSRS-main/train/vi"))
+
+assert len(IR_files) == len(VIS_files), f"错误：IR图片数量({len(IR_files)})与VIS图片数量({len(VIS_files)})不一致！"
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Prepare paired image patches for PromptRoute-Mamba.")
-    parser.add_argument("--ir-dir", type=Path, required=True, help="Directory containing infrared images.")
-    parser.add_argument("--vi-dir", type=Path, required=True, help="Directory containing visible images.")
-    parser.add_argument("--output", type=Path, default=Path("data/MSRS_train_imgsize_256_stride_100.h5"))
-    parser.add_argument("--patch-size", type=int, default=256)
-    parser.add_argument("--stride", type=int, default=100)
-    return parser.parse_args()
+save_dir = './data'
+os.makedirs(save_dir, exist_ok=True)
+h5_path = os.path.join(save_dir, data_name+'_imgsize_'+str(img_size)+"_stride_"+str(stride)+'.h5')
+
+h5f = h5py.File(h5_path, 'w')
+h5_ir = h5f.create_group('ir_patchs')
+h5_vis = h5f.create_group('vis_patchs')
+train_num=0
+
+for i in tqdm(range(len(IR_files))):
+        I_VIS = imread(VIS_files[i]).astype(np.float32).transpose(2,0,1)/255. # [3, H, W] Uint8->float32
+        I_VIS = rgb2y(I_VIS) # [1, H, W] Float32
+        
+        
+        ir_img = imread(IR_files[i]).astype(np.float32)
+        if len(ir_img.shape) == 2:
+            I_IR = ir_img[None, :, :]/255.  # [1, H, W] Float32
+        else:
+            I_IR = ir_img.transpose(2,0,1)[0:1, :, :]/255.
+        
+        # crop    
+        I_IR_Patch_Group = Im2Patch(I_IR,img_size,stride)
+        I_VIS_Patch_Group = Im2Patch(I_VIS, img_size, stride) 
+        
+        for ii in range(I_IR_Patch_Group.shape[-1]):
+            bad_IR = is_low_contrast(I_IR_Patch_Group[0,:,:,ii])
+            bad_VIS = is_low_contrast(I_VIS_Patch_Group[0,:,:,ii])
+            # Determine if the contrast is low
+            if not (bad_IR or bad_VIS):
+                avl_IR= I_IR_Patch_Group[0,:,:,ii]  #  available IR
+                avl_VIS= I_VIS_Patch_Group[0,:,:,ii]
+                avl_IR=avl_IR[None,...]
+                avl_VIS=avl_VIS[None,...]
+
+                h5_ir.create_dataset(str(train_num),     data=avl_IR, 
+                                    dtype=avl_IR.dtype,   shape=avl_IR.shape)
+                h5_vis.create_dataset(str(train_num),    data=avl_VIS, 
+                                    dtype=avl_VIS.dtype,  shape=avl_VIS.shape)
+                train_num += 1        
+
+h5f.close()
 
 
-def image_files(folder):
-    return {path.name: path for path in folder.rglob("*") if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES}
-
-
-def rgb_to_y(image):
-    if image.ndim == 2:
-        return image[None, ...]
-    image = image.transpose(2, 0, 1)
-    return image[0:1] * 0.299 + image[1:2] * 0.587 + image[2:3] * 0.114
-
-
-def image_to_patches(image, window, stride):
-    channels, height, width = image.shape
-    rows = range(0, height - window + 1, stride)
-    cols = range(0, width - window + 1, stride)
-    patches = [image[:, row : row + window, col : col + window] for row in rows for col in cols]
-    if not patches:
-        return np.empty((channels, window, window, 0), dtype=np.float32)
-    return np.stack(patches, axis=-1).astype(np.float32)
-
-
-def is_low_contrast(image, fraction_threshold=0.1, lower_percentile=10, upper_percentile=90):
-    lower, upper = np.percentile(image, [lower_percentile, upper_percentile])
-    return upper == 0 or (upper - lower) / upper < fraction_threshold
-
-
-def read_unit_image(path):
-    return imread(path).astype(np.float32) / 255.0
-
-
-def main():
-    args = parse_args()
-    ir_files = image_files(args.ir_dir)
-    vi_files = image_files(args.vi_dir)
-    names = sorted(ir_files.keys() & vi_files.keys())
-    if not names:
-        raise RuntimeError("No aligned image pairs with matching filenames were found.")
-
-    missing_ir = sorted(vi_files.keys() - ir_files.keys())
-    missing_vi = sorted(ir_files.keys() - vi_files.keys())
-    if missing_ir or missing_vi:
-        raise RuntimeError(f"Unpaired files detected: {len(missing_ir)} missing IR, {len(missing_vi)} missing visible.")
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    patch_count = 0
-    with h5py.File(args.output, "w") as h5_file:
-        h5_ir = h5_file.create_group("ir_patchs")
-        h5_vi = h5_file.create_group("vis_patchs")
-        for name in tqdm(names, desc="Preparing patches"):
-            ir = read_unit_image(ir_files[name])
-            ir = ir[None, ...] if ir.ndim == 2 else ir.transpose(2, 0, 1)[0:1]
-            vi = rgb_to_y(read_unit_image(vi_files[name]))
-            ir_patches = image_to_patches(ir, args.patch_size, args.stride)
-            vi_patches = image_to_patches(vi, args.patch_size, args.stride)
-            for index in range(ir_patches.shape[-1]):
-                ir_patch = ir_patches[0, :, :, index]
-                vi_patch = vi_patches[0, :, :, index]
-                if is_low_contrast(ir_patch) or is_low_contrast(vi_patch):
-                    continue
-                h5_ir.create_dataset(str(patch_count), data=ir_patch[None, ...])
-                h5_vi.create_dataset(str(patch_count), data=vi_patch[None, ...])
-                patch_count += 1
-    print(f"Saved {patch_count} aligned patches to {args.output}")
-
-
-if __name__ == "__main__":
-    main()
+print("Data preparation complete. Verifying...")
+with h5py.File(h5_path, "r") as f:
+    for key in f.keys():
+        print(f[key], key, f[key].name)

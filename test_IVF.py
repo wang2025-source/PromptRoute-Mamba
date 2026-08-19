@@ -1,86 +1,98 @@
-"""Fuse an infrared/visible test set and optionally report eight metrics."""
+# -*- coding: utf-8 -*-
 
-import argparse
-from pathlib import Path
-
+from net import Mamba_Encoder, Mamba_Decoder, AdvancedBaseFusion, SpatialChannelDetailFusion
+import os
 import numpy as np
+from utils.Evaluator import Evaluator
 import torch
 import torch.nn as nn
+from utils.img_read_save import img_save, image_read_cv2
+import warnings
+import logging
+warnings.filterwarnings("ignore")
+logging.basicConfig(level=logging.CRITICAL)
 
-from net import AdvancedBaseFusion, Mamba_Decoder, Mamba_Encoder, SpatialChannelDetailFusion
-from utils.Evaluator import Evaluator
-from utils.img_read_save import image_read_cv2, img_save
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Test PromptRoute-Mamba on paired infrared/visible images.")
-    parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--input-dir", type=Path, required=True, help="Folder containing ir/ and vi/ subfolders.")
-    parser.add_argument("--output-dir", type=Path, default=Path("test_result/MSRS"))
-    parser.add_argument("--device", default="cuda")
-    parser.add_argument("--no-metrics", action="store_true", help="Save fused images without computing metrics.")
-    return parser.parse_args()
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 
-def build_models(device):
-    modules = (
-        Mamba_Encoder(inp_channels=1, dim=64), Mamba_Decoder(out_channels=1, dim=64),
-        AdvancedBaseFusion(dim=64), SpatialChannelDetailFusion(dim=64),
-    )
-    return tuple(nn.DataParallel(module).to(device) for module in modules)
+ckpt_path = r"/root/autodl-tmp/MMIF-CDDFuse/models/Mamba_CDDFuse_MSCA_SOTA_05-25-10-14.pth"
 
+for dataset_name in ["MSRS"]:
+    print("\n"*2+"="*80)
+    model_name = "Fast-Mamba-DVSS-CDDFuse" 
+    print("The test result of "+dataset_name+' :')
 
-def main():
-    args = parse_args()
-    if args.device.startswith("cuda") and not torch.cuda.is_available():
-        raise RuntimeError("CUDA was requested but is not available.")
-    ir_dir, vi_dir = args.input_dir / "ir", args.input_dir / "vi"
-    names = sorted(path.name for path in ir_dir.iterdir() if path.is_file() and (vi_dir / path.name).is_file())
-    if not names:
-        raise RuntimeError("No aligned pairs were found in input-dir/ir and input-dir/vi.")
+    test_folder = '/root/autodl-tmp/MSRS-main/test' 
+    
+    test_out_folder = os.path.join('test_result', dataset_name)
+    os.makedirs(test_out_folder, exist_ok=True) 
 
-    device = torch.device(args.device)
-    encoder, decoder, base_fusion, detail_fusion = build_models(device)
-    checkpoint = torch.load(args.checkpoint, map_location=device)
-    encoder.load_state_dict(checkpoint["DIDF_Encoder"])
-    decoder.load_state_dict(checkpoint["DIDF_Decoder"])
-    base_fusion.load_state_dict(checkpoint["BaseFuseLayer"])
-    detail_fusion.load_state_dict(checkpoint["DetailFuseLayer"])
-    for module in (encoder, decoder, base_fusion, detail_fusion):
-        module.eval()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    
+    Encoder = nn.DataParallel(Mamba_Encoder(inp_channels=1, dim=64)).to(device)
+    Decoder = nn.DataParallel(Mamba_Decoder(out_channels=1, dim=64)).to(device)
+    BaseFuseLayer = nn.DataParallel(AdvancedBaseFusion(dim=64)).to(device)
+    DetailFuseLayer = nn.DataParallel(SpatialChannelDetailFusion(dim=64)).to(device)
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    with torch.inference_mode():
-        for name in names:
-            infrared = image_read_cv2(str(ir_dir / name), mode="GRAY")[None, None, ...] / 255.0
-            visible = image_read_cv2(str(vi_dir / name), mode="GRAY")[None, None, ...] / 255.0
-            infrared = torch.from_numpy(infrared).float().to(device)
-            visible = torch.from_numpy(visible).float().to(device)
-            visible_base, visible_detail, _ = encoder(visible)
-            infrared_base, infrared_detail, _ = encoder(infrared)
-            fused_base = base_fusion(visible_base, infrared_base)
-            fused_detail = detail_fusion(visible_detail, infrared_detail)
-            fused, _ = decoder(fused_base, fused_detail)
-            fused = (fused - fused.amin()) / (fused.amax() - fused.amin()).clamp_min(1e-8)
-            img_save(np.squeeze((fused * 255).cpu().numpy()), Path(name).stem, str(args.output_dir))
+    
+    Encoder.load_state_dict(torch.load(ckpt_path)['DIDF_Encoder'])
+    Decoder.load_state_dict(torch.load(ckpt_path)['DIDF_Decoder'])
+    BaseFuseLayer.load_state_dict(torch.load(ckpt_path)['BaseFuseLayer'])
+    DetailFuseLayer.load_state_dict(torch.load(ckpt_path)['DetailFuseLayer'])
+    
+    Encoder.eval()
+    Decoder.eval()
+    BaseFuseLayer.eval()
+    DetailFuseLayer.eval()
 
-    print(f"Saved {len(names)} fused images to {args.output_dir}")
-    if args.no_metrics:
-        return
-    totals = np.zeros(8)
-    for name in names:
-        infrared = image_read_cv2(str(ir_dir / name), "GRAY")
-        visible = image_read_cv2(str(vi_dir / name), "GRAY")
-        fused = image_read_cv2(str(args.output_dir / f"{Path(name).stem}.png"), "GRAY")
-        totals += np.array([
-            Evaluator.EN(fused), Evaluator.SD(fused), Evaluator.SF(fused), Evaluator.MI(fused, infrared, visible),
-            Evaluator.SCD(fused, infrared, visible), Evaluator.VIFF(fused, infrared, visible),
-            Evaluator.Qabf(fused, infrared, visible), Evaluator.SSIM(fused, infrared, visible),
-        ])
-    values = totals / len(names)
-    print("EN\tSD\tSF\tMI\tSCD\tVIF\tQabf\tSSIM")
-    print("\t".join(f"{value:.2f}" for value in values))
+    with torch.no_grad():
+        for img_name in os.listdir(os.path.join(test_folder,"ir")):
 
+            data_IR = image_read_cv2(os.path.join(test_folder,"ir",img_name),mode='GRAY')[np.newaxis,np.newaxis, ...]/255.0
+            data_VIS = image_read_cv2(os.path.join(test_folder,"vi",img_name), mode='GRAY')[np.newaxis,np.newaxis, ...]/255.0
 
-if __name__ == "__main__":
-    main()
+            data_IR, data_VIS = torch.FloatTensor(data_IR), torch.FloatTensor(data_VIS)
+            data_VIS, data_IR = data_VIS.cuda(), data_IR.cuda()
+
+            
+            feature_V_B, feature_V_D, feature_V = Encoder(data_VIS)
+            feature_I_B, feature_I_D, feature_I = Encoder(data_IR)
+            
+            
+            feature_F_B = BaseFuseLayer(feature_V_B, feature_I_B)
+            feature_F_D = DetailFuseLayer(feature_V_D, feature_I_D)
+            
+            
+            data_Fuse, _ = Decoder(feature_F_B, feature_F_D)
+            
+            
+            data_Fuse = (data_Fuse - torch.min(data_Fuse)) / (torch.max(data_Fuse) - torch.min(data_Fuse))
+            fi = np.squeeze((data_Fuse * 255).cpu().numpy())
+            img_save(fi, img_name.split(sep='.')[0], test_out_folder)
+
+    eval_folder = test_out_folder  
+    ori_img_folder = test_folder
+
+    metric_result = np.zeros((8))
+    for img_name in os.listdir(os.path.join(ori_img_folder,"ir")):
+            ir = image_read_cv2(os.path.join(ori_img_folder,"ir", img_name), 'GRAY')
+            vi = image_read_cv2(os.path.join(ori_img_folder,"vi", img_name), 'GRAY')
+            fi = image_read_cv2(os.path.join(eval_folder, img_name.split('.')[0]+".png"), 'GRAY')
+            metric_result += np.array([Evaluator.EN(fi), Evaluator.SD(fi)
+                                        , Evaluator.SF(fi), Evaluator.MI(fi, ir, vi)
+                                        , Evaluator.SCD(fi, ir, vi), Evaluator.VIFF(fi, ir, vi)
+                                        , Evaluator.Qabf(fi, ir, vi), Evaluator.SSIM(fi, ir, vi)])
+
+    metric_result /= len(os.listdir(eval_folder))
+    print("\t\t EN\t SD\t SF\t MI\tSCD\tVIF\tQabf\tSSIM")
+    print(model_name+'\t'+str(np.round(metric_result[0], 2))+'\t'
+            +str(np.round(metric_result[1], 2))+'\t'
+            +str(np.round(metric_result[2], 2))+'\t'
+            +str(np.round(metric_result[3], 2))+'\t'
+            +str(np.round(metric_result[4], 2))+'\t'
+            +str(np.round(metric_result[5], 2))+'\t'
+            +str(np.round(metric_result[6], 2))+'\t'
+            +str(np.round(metric_result[7], 2))
+            )
+    print("="*80)

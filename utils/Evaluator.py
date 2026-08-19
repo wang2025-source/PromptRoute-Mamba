@@ -11,7 +11,7 @@ def image_read_cv2(path, mode='RGB'):
     assert mode == 'RGB' or mode == 'GRAY' or mode == 'YCrCb', 'mode error'
     if mode == 'RGB':
         img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2RGB)
-    elif mode == 'GRAY':
+    elif mode == 'GRAY':  
         img = np.round(cv2.cvtColor(img_BGR, cv2.COLOR_BGR2GRAY))
     elif mode == 'YCrCb':
         img = cv2.cvtColor(img_BGR, cv2.COLOR_BGR2YCrCb)
@@ -19,7 +19,7 @@ def image_read_cv2(path, mode='RGB'):
 
 class Evaluator():
     @classmethod
-    def input_check(cls, imgF, imgA=None, imgB=None):
+    def input_check(cls, imgF, imgA=None, imgB=None): 
         if imgA is None:
             assert type(imgF) == np.ndarray, 'type error'
             assert len(imgF.shape) == 2, 'dimension error'
@@ -172,7 +172,7 @@ class Evaluator():
         QAF = cls.Qabf_getQabf(aA, gA, aF, gF)
         QBF = cls.Qabf_getQabf(aB, gB, aF, gF)
 
-        # 计算QABF
+        
         deno = np.sum(gA + gB)
         nume = np.sum(np.multiply(QAF, gA) + np.multiply(QBF, gB))
         return nume / deno
@@ -213,7 +213,7 @@ class Evaluator():
 
     @classmethod
     def SSIM(cls, image_F, image_A, image_B):
-        # 判断数据范围
+        
         if image_F.dtype in [np.float32, np.float64]:
             if image_F.max() <= 1.0:
                 data_range = 1.0
@@ -221,7 +221,7 @@ class Evaluator():
                 data_range = 255.0
         else:
             data_range = 255.0
-
+        
         return ssim(image_F, image_A, data_range=data_range) + \
                ssim(image_F, image_B, data_range=data_range)
 

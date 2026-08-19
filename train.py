@@ -1,141 +1,200 @@
-"""Two-stage training entry point for PromptRoute-Mamba."""
-
-import argparse
-import datetime
-from pathlib import Path
+# -*- coding: utf-8 -*-
+from net import Mamba_Encoder, Mamba_Decoder, AdvancedBaseFusion, SpatialChannelDetailFusion
+from utils.dataset import H5Dataset
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import sys
 import time
-
-import kornia
+import datetime
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
+
+from utils.loss import Fusionloss, cc, safe_ssim_loss 
+import kornia
 from torch.utils.tensorboard import SummaryWriter
+from torch.cuda.amp import autocast, GradScaler 
+import torch.nn.functional as F
 
-from net import AdvancedBaseFusion, Mamba_Decoder, Mamba_Encoder, SpatialChannelDetailFusion
-from utils.dataset import H5Dataset
-from utils.loss import Fusionloss, cc, safe_ssim_loss
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+criteria_fusion = Fusionloss()
+model_str = 'Mamba_CDDFuse_MSCA_SOTA' 
 
+num_epochs = 12 
+epoch_gap = 4  
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train PromptRoute-Mamba in two stages.")
-    parser.add_argument("--data", type=Path, required=True, help="HDF5 file created by dataprocessing.py.")
-    parser.add_argument("--epochs", type=int, default=12)
-    parser.add_argument("--stage1-epochs", type=int, default=4)
-    parser.add_argument("--batch-size", type=int, default=2)
-    parser.add_argument("--workers", type=int, default=8)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--device", default="cuda")
-    parser.add_argument("--output-dir", type=Path, default=Path("models"))
-    parser.add_argument("--log-dir", type=Path, default=Path("runs"))
-    parser.add_argument("--name", default="PromptRoute-Mamba")
-    return parser.parse_args()
+lr = 1e-4 
+weight_decay = 0
+batch_size = 2 
 
+coeff_mse_loss_VF = 1. 
+coeff_mse_loss_IF = 1.
+coeff_decomp = 2.      
+coeff_tv = 5.
 
-def build_models(device):
-    modules = (
-        Mamba_Encoder(inp_channels=1, dim=64),
-        Mamba_Decoder(out_channels=1, dim=64),
-        AdvancedBaseFusion(dim=64),
-        SpatialChannelDetailFusion(dim=64),
-    )
-    return tuple(nn.DataParallel(module).to(device) for module in modules)
+clip_grad_norm_value = 0.01
+optim_step = 4
+optim_gamma = 0.5
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-def main():
-    args = parse_args()
-    if args.stage1_epochs < 1 or args.stage1_epochs >= args.epochs:
-        raise ValueError("--stage1-epochs must be in [1, epochs - 1].")
-    if args.device.startswith("cuda") and not torch.cuda.is_available():
-        raise RuntimeError("CUDA was requested but is not available.")
+DIDF_Encoder = nn.DataParallel(Mamba_Encoder(inp_channels=1, dim=64)).to(device)
+DIDF_Decoder = nn.DataParallel(Mamba_Decoder(out_channels=1, dim=64)).to(device)
+BaseFuseLayer = nn.DataParallel(AdvancedBaseFusion(dim=64)).to(device)
+DetailFuseLayer = nn.DataParallel(SpatialChannelDetailFusion(dim=64)).to(device)
 
-    device = torch.device(args.device)
-    modules = build_models(device)
-    encoder, decoder, base_fusion, detail_fusion = modules
-    optimizers = [torch.optim.Adam(module.parameters(), lr=args.lr) for module in modules]
-    schedulers = [torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.5) for optimizer in optimizers]
-    loader = DataLoader(
-        H5Dataset(args.data), batch_size=args.batch_size, shuffle=True, num_workers=args.workers,
-        pin_memory=device.type == "cuda", persistent_workers=args.workers > 0,
-    )
+optimizer1 = torch.optim.Adam(DIDF_Encoder.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer2 = torch.optim.Adam(DIDF_Decoder.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer3 = torch.optim.Adam(BaseFuseLayer.parameters(), lr=lr, weight_decay=weight_decay)
+optimizer4 = torch.optim.Adam(DetailFuseLayer.parameters(), lr=lr, weight_decay=weight_decay)
 
-    fusion_criterion = Fusionloss()
-    mse, l1 = nn.MSELoss(), nn.L1Loss()
-    scaler = GradScaler(enabled=device.type == "cuda")
-    timestamp = datetime.datetime.now().strftime("%m-%d-%H-%M")
-    writer = SummaryWriter(args.log_dir / f"{args.name}_{timestamp}")
-    global_step = 0
+scheduler1 = torch.optim.lr_scheduler.StepLR(optimizer1, step_size=optim_step, gamma=optim_gamma)
+scheduler2 = torch.optim.lr_scheduler.StepLR(optimizer2, step_size=optim_step, gamma=optim_gamma)
+scheduler3 = torch.optim.lr_scheduler.StepLR(optimizer3, step_size=optim_step, gamma=optim_gamma)
+scheduler4 = torch.optim.lr_scheduler.StepLR(optimizer4, step_size=optim_step, gamma=optim_gamma)
 
-    for epoch in range(args.epochs):
-        stage_one = epoch < args.stage1_epochs
-        encoder.train(stage_one)
-        decoder.train(stage_one)
-        base_fusion.train(not stage_one)
-        detail_fusion.train(not stage_one)
-        epoch_start = time.time()
-        for batch_index, (visible, infrared) in enumerate(loader, start=1):
-            visible = visible.to(device, non_blocking=True)
-            infrared = infrared.to(device, non_blocking=True)
-            for optimizer in optimizers:
-                optimizer.zero_grad(set_to_none=True)
+MSELoss = nn.MSELoss()  
+L1Loss = nn.L1Loss()
+scaler = GradScaler() 
 
-            with autocast(enabled=device.type == "cuda"):
-                if stage_one:
-                    visible_base, visible_detail, _ = encoder(visible)
-                    infrared_base, infrared_detail, _ = encoder(infrared)
-                    visible_hat, _ = decoder(visible_base, visible_detail)
-                    infrared_hat, _ = decoder(infrared_base, infrared_detail)
-                    visible_loss = 5 * safe_ssim_loss(visible_hat, visible, window_size=11).mean() + mse(visible_hat, visible)
-                    infrared_loss = 5 * safe_ssim_loss(infrared_hat, infrared, window_size=11).mean() + mse(infrared_hat, infrared)
-                    decomposition_loss = cc(visible_detail, infrared_detail).square() + 0.5 * (1 - cc(visible_base, infrared_base))
-                    gradient_loss = l1(kornia.filters.SpatialGradient()(visible), kornia.filters.SpatialGradient()(visible_hat))
-                    loss = visible_loss + infrared_loss + 2 * decomposition_loss + 5 * gradient_loss
-                else:
-                    with torch.no_grad():
-                        visible_base, visible_detail, _ = encoder(visible)
-                        infrared_base, infrared_detail, _ = encoder(infrared)
-                    fused_base = base_fusion(visible_base, infrared_base)
-                    fused_detail = detail_fusion(visible_detail, infrared_detail)
-                    fused, _ = decoder(fused_base, fused_detail)
-                    fusion_loss, _, _ = fusion_criterion(visible, infrared, fused)
-                    prototypes = base_fusion.module.dusc.prototypes.squeeze(0)
-                    normalized = F.normalize(prototypes.float(), dim=-1, eps=1e-6).to(prototypes.dtype)
-                    similarity = normalized @ normalized.t()
-                    identity = torch.eye(similarity.size(0), device=device, dtype=similarity.dtype)
-                    orthogonal_loss = ((similarity - identity) ** 2).sum()
-                    loss = fusion_loss + 5 * orthogonal_loss
+trainloader = DataLoader(H5Dataset(r"/root/autodl-tmp/MMIF-CDDFuse/data/MSRS_train_imgsize_256_stride_100.h5"),
+                         batch_size=batch_size,
+                         shuffle=True,
+                         num_workers=8)
 
-            scaler.scale(loss).backward()
-            active = (0, 1) if stage_one else (2, 3)
-            for index in active:
-                scaler.unscale_(optimizers[index])
-                nn.utils.clip_grad_norm_(modules[index].parameters(), max_norm=0.01)
-                scaler.step(optimizers[index])
-            scaler.update()
-            global_step += 1
-            writer.add_scalar("loss/total", loss.item(), global_step)
-            if stage_one:
-                writer.add_scalar("loss/reconstruction_visible", visible_loss.item(), global_step)
-                writer.add_scalar("loss/reconstruction_infrared", infrared_loss.item(), global_step)
-            else:
-                writer.add_scalar("loss/fusion", fusion_loss.item(), global_step)
-                writer.add_scalar("loss/orthogonal", orthogonal_loss.item(), global_step)
-            print(f"\rEpoch {epoch + 1:02d}/{args.epochs:02d} | batch {batch_index:04d}/{len(loader):04d} | loss {loss.item():.5f}", end="")
+loader = {'train': trainloader }
+timestamp = datetime.datetime.now().strftime("%m-%d-%H-%M")
+log_dir = f"runs/{model_str}_{timestamp}"
+writer = SummaryWriter(log_dir)
 
-        for index in ((0, 1) if stage_one else (2, 3)):
-            schedulers[index].step()
-        print(f" | {time.time() - epoch_start:.1f}s")
+global_step = 0
+prev_time = time.time()
 
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = args.output_dir / f"{args.name}_{timestamp}.pth"
-    torch.save({
-        "DIDF_Encoder": encoder.state_dict(), "DIDF_Decoder": decoder.state_dict(),
-        "BaseFuseLayer": base_fusion.state_dict(), "DetailFuseLayer": detail_fusion.state_dict(),
-    }, checkpoint_path)
-    writer.close()
-    print(f"Checkpoint saved to {checkpoint_path}")
+for epoch in range(num_epochs):
+    for i, (data_VIS, data_IR) in enumerate(loader['train']):
+        data_VIS, data_IR = data_VIS.cuda(), data_IR.cuda()
+        
+        
+        if epoch < epoch_gap:
+            DIDF_Encoder.train()
+            DIDF_Decoder.train()
+            BaseFuseLayer.eval()   
+            DetailFuseLayer.eval()
+        else:
+            DIDF_Encoder.eval()    
+            DIDF_Decoder.eval()
+            BaseFuseLayer.train()
+            DetailFuseLayer.train()
 
+        optimizer1.zero_grad()
+        optimizer2.zero_grad()
+        optimizer3.zero_grad()
+        optimizer4.zero_grad()
 
-if __name__ == "__main__":
-    main()
+        with autocast():
+            if epoch < epoch_gap: 
+                
+                feature_V_B, feature_V_D, _ = DIDF_Encoder(data_VIS)
+                feature_I_B, feature_I_D, _ = DIDF_Encoder(data_IR)
+                data_VIS_hat, _ = DIDF_Decoder(feature_V_B, feature_V_D)
+                data_IR_hat, _ = DIDF_Decoder(feature_I_B, feature_I_D)
+
+                cc_loss_B = cc(feature_V_B, feature_I_B)
+                cc_loss_D = cc(feature_V_D, feature_I_D)
+                
+                
+                mse_loss_V = 5 * torch.mean(safe_ssim_loss(data_VIS_hat, data_VIS, window_size=11)) + MSELoss(data_VIS, data_VIS_hat)
+                mse_loss_I = 5 * torch.mean(safe_ssim_loss(data_IR_hat, data_IR, window_size=11)) + MSELoss(data_IR, data_IR_hat)
+                
+                Gradient_loss = L1Loss(kornia.filters.SpatialGradient()(data_VIS), kornia.filters.SpatialGradient()(data_VIS_hat))
+
+                loss_decomp = (cc_loss_D ** 2) + 0.5 * (1.0 - cc_loss_B) 
+                loss = coeff_mse_loss_VF * mse_loss_V + coeff_mse_loss_IF * mse_loss_I + coeff_decomp * loss_decomp + coeff_tv * Gradient_loss
+                
+            else:  
+                
+                with torch.no_grad():
+                    feature_V_B, feature_V_D, _ = DIDF_Encoder(data_VIS)
+                    feature_I_B, feature_I_D, _ = DIDF_Encoder(data_IR)
+                
+                feature_F_B = BaseFuseLayer(feature_V_B, feature_I_B)
+                feature_F_D = DetailFuseLayer(feature_V_D, feature_I_D)
+                
+                data_Fuse, feature_F = DIDF_Decoder(feature_F_B, feature_F_D)  
+
+                
+                fusionloss, _, _ = criteria_fusion(data_VIS, data_IR, data_Fuse)
+                
+                # ==========================================================
+                
+                # ==========================================================
+                prototypes = BaseFuseLayer.module.dusc.prototypes.squeeze(0) 
+                
+                p_norm = F.normalize(prototypes.float(), dim=-1, eps=1e-6).to(prototypes.dtype)
+                
+                sim_matrix = torch.matmul(p_norm, p_norm.t())
+                identity = torch.eye(sim_matrix.size(0)).to(sim_matrix.device)
+                
+                
+                loss_ortho = torch.sum((sim_matrix - identity) ** 2)
+
+                
+                loss = fusionloss + 5.0 * loss_ortho
+                # ==========================================================
+
+        scaler.scale(loss).backward()
+        
+        
+        if epoch < epoch_gap:
+            scaler.unscale_(optimizer1)
+            scaler.unscale_(optimizer2)
+            nn.utils.clip_grad_norm_(DIDF_Encoder.parameters(), max_norm=clip_grad_norm_value)
+            nn.utils.clip_grad_norm_(DIDF_Decoder.parameters(), max_norm=clip_grad_norm_value)
+            scaler.step(optimizer1)
+            scaler.step(optimizer2)
+        else:
+            scaler.unscale_(optimizer3)
+            scaler.unscale_(optimizer4)
+            nn.utils.clip_grad_norm_(BaseFuseLayer.parameters(), max_norm=clip_grad_norm_value)
+            nn.utils.clip_grad_norm_(DetailFuseLayer.parameters(), max_norm=clip_grad_norm_value)
+            scaler.step(optimizer3)
+            scaler.step(optimizer4)
+            
+        scaler.update()
+
+        global_step += 1
+        writer.add_scalar('Loss/total', loss.item(), global_step)
+        
+        if epoch < epoch_gap:
+            writer.add_scalar('Loss/mse_visible', mse_loss_V.item(), global_step)
+            writer.add_scalar('Loss/mse_infrared', mse_loss_I.item(), global_step)
+        else:
+            writer.add_scalar('Loss/fusion', fusionloss.item(), global_step)
+            writer.add_scalar('Loss/ortho_penalty', loss_ortho.item(), global_step)
+
+        batches_done = epoch * len(loader['train']) + i
+        batches_left = num_epochs * len(loader['train']) - batches_done
+        time_left = datetime.timedelta(seconds=batches_left * (time.time() - prev_time))
+        prev_time = time.time()
+        sys.stdout.write(
+            "\r[Epoch %d/%d] [Batch %d/%d] [loss: %f] ETA: %.10s"
+            % (epoch, num_epochs, i, len(loader['train']), loss.item(), time_left,)
+        )
+
+    if epoch < epoch_gap:
+        scheduler1.step()  
+        scheduler2.step()
+    else:
+        scheduler3.step()
+        scheduler4.step()
+        torch.cuda.empty_cache()
+    
+os.makedirs("models", exist_ok=True)
+checkpoint = {
+    'DIDF_Encoder': DIDF_Encoder.state_dict(),
+    'DIDF_Decoder': DIDF_Decoder.state_dict(),
+    'BaseFuseLayer': BaseFuseLayer.state_dict(),
+    'DetailFuseLayer': DetailFuseLayer.state_dict(),
+}
+torch.save(checkpoint, os.path.join("models", f"{model_str}_{timestamp}.pth"))
+writer.close()

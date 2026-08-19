@@ -12,7 +12,7 @@ class H5Dataset(Data.Dataset):
 
     def __len__(self):
         return len(self.keys)
-
+    
     def __getitem__(self, index):
         h5f = h5py.File(self.h5file_path, 'r')
         key = self.keys[index]
