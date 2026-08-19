@@ -23,6 +23,7 @@ runs/
 logs/
 outputs/
 test_result/
+tmp/
 *.h5
 *.hdf5
 *.pth

@@ -11,7 +11,7 @@
 
 Official implementation of **PromptRoute-Mamba**, a progressive cross-modal reliability reasoning network for infrared-visible image fusion.
 
-[Overview](#overview) · [Setup](#setup) · [Training](#training) · [Testing](#testing) · [Citation](#citation)
+[Overview](#overview) · [Datasets](#datasets) · [Training](#training) · [Testing](#testing) · [Figure Gallery](#figure-gallery) · [Citation](#citation)
 
 </div>
 
@@ -20,7 +20,7 @@ Official implementation of **PromptRoute-Mamba**, a progressive cross-modal reli
 PromptRoute-Mamba decomposes each modality into base and detail representations, performs reliability-aware prompt routing in the base stream, and uses state-space modeling for efficient long-range cross-modal coordination. Training follows a stable two-stage strategy: representation learning first, fusion learning second.
 
 <p align="center">
-  <img src="assets/architecture.webp" width="100%" alt="PromptRoute-Mamba architecture">
+  <img src="assets/figures/wang03.webp" width="100%" alt="PromptRoute-Mamba architecture">
 </p>
 
 ### Highlights
@@ -49,6 +49,18 @@ MSRS/
     ├── ir/
     └── vi/
 ```
+
+## Datasets
+
+| Dataset | Usage in this work | Scale used | Official source |
+|:--|:--|:--|:--|
+| **MSRS** | Training, fusion evaluation, semantic segmentation | 1,083 train + 361 test pairs | [Linfeng-Tang/MSRS](https://github.com/Linfeng-Tang/MSRS) |
+| **RoadScene** | Zero-shot fusion evaluation | 221 pairs | [hanna-xu/RoadScene](https://github.com/hanna-xu/RoadScene) |
+| **TNO** | Zero-shot fusion evaluation | 261 pairs | [TNO Image Fusion Dataset](https://figshare.com/articles/dataset/TNO_Image_Fusion_Dataset/1008029) |
+| **LLVIP** | Zero-shot low-light fusion evaluation | 3,463 test pairs | [bupt-ai-cz/LLVIP](https://github.com/bupt-ai-cz/LLVIP) |
+| **M3FD** | Downstream object detection | 4,200 aligned pairs | [JinyuanLiu-CV/TarDAL](https://github.com/JinyuanLiu-CV/TarDAL) |
+
+Please follow the license and citation requirements provided by each dataset owner. Dataset files are not redistributed in this repository.
 
 ## Training
 
@@ -90,23 +102,36 @@ python test_IVF.py \
 
 The script saves fused PNG images and reports EN, SD, SF, MI, SCD, VIF, Qabf, and SSIM. Add `--no-metrics` when only fused images are needed.
 
-## Results
+## Figure Gallery
 
-<p align="center">
-  <img src="assets/qualitative_msrs.webp" width="100%" alt="Qualitative comparison on MSRS">
-</p>
+All figures from the paper are included below in a compact gallery.
 
-<p align="center">
-  <img src="assets/performance_overview.webp" width="92%" alt="Performance and complexity comparison">
-</p>
-
-PromptRoute-Mamba preserves thermal targets and structural detail while maintaining a favorable quality-efficiency balance.
+| | |
+|:--:|:--:|
+| <img src="assets/figures/wang01.webp" width="100%" alt="Performance and complexity comparison"> | <img src="assets/figures/wang02.webp" width="100%" alt="Prompt-guided prototype routing"> |
+| **Performance-complexity comparison** | **Prompt-guided prototype routing** |
+| <img src="assets/figures/wang03.webp" width="100%" alt="Overall architecture"> | <img src="assets/figures/wang04.webp" width="100%" alt="Base-detail encoder"> |
+| **Overall architecture** | **Mamba-based base-detail encoder** |
+| <img src="assets/figures/wang05.webp" width="100%" alt="Base fusion layer"> | <img src="assets/figures/wang06.webp" width="100%" alt="Detail fusion layer"> |
+| **Reliability-aware base fusion** | **Detail fusion layer** |
+| <img src="assets/figures/wang07.webp" width="100%" alt="Orthogonal prototype regularization"> | <img src="assets/figures/wang08.webp" width="100%" alt="MSRS qualitative results"> |
+| **Orthogonal prototype regularization** | **MSRS qualitative comparison** |
+| <img src="assets/figures/wang09.webp" width="100%" alt="RoadScene qualitative results"> | <img src="assets/figures/wang10.webp" width="100%" alt="TNO qualitative results"> |
+| **RoadScene qualitative comparison** | **TNO qualitative comparison** |
+| <img src="assets/figures/wang11.webp" width="100%" alt="LLVIP qualitative results"> | <img src="assets/figures/wang12.webp" width="100%" alt="Qualitative ablation analysis"> |
+| **LLVIP qualitative comparison** | **Qualitative ablation analysis** |
+| <img src="assets/figures/wang13.webp" width="100%" alt="Prototype response analysis"> | <img src="assets/figures/wang14.webp" width="100%" alt="Reliability under corruptions"> |
+| **Prototype-response analysis** | **Reliability under controlled corruptions** |
+| <img src="assets/figures/wang15.webp" width="100%" alt="Parameter sensitivity"> | <img src="assets/figures/wang16.webp" width="100%" alt="Power spectral density"> |
+| **Parameter sensitivity** | **Power spectral density** |
+| <img src="assets/figures/wang17.webp" width="100%" alt="M3FD object detection"> | <img src="assets/figures/wang18.webp" width="100%" alt="MSRS semantic segmentation"> |
+| **M3FD object detection** | **MSRS semantic segmentation** |
 
 ## Repository Layout
 
 ```text
 PromptRoute-Mamba/
-├── assets/              # README figures
+├── assets/figures/      # complete paper figure gallery
 ├── utils/               # data, losses, metrics, and image I/O
 ├── dataprocessing.py    # paired patch preparation
 ├── net.py               # PromptRoute-Mamba architecture
