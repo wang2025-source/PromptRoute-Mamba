@@ -20,7 +20,8 @@ Official implementation of **PromptRoute-Mamba**, a progressive cross-modal reli
 PromptRoute-Mamba decomposes each modality into base and detail representations, performs reliability-aware prompt routing in the base stream, and uses state-space modeling for efficient long-range cross-modal coordination. Training follows a stable two-stage strategy: representation learning first, fusion learning second.
 
 <p align="center">
-  <img src="assets/figures/wang03.webp" width="100%" alt="PromptRoute-Mamba architecture">
+  <img src="assets/figures/wang02.webp" width="100%" alt="Prompt-guided prototype routing">
+  <br><sub><b>Prompt-guided prototype routing.</b></sub>
 </p>
 
 ### Highlights
@@ -136,22 +137,57 @@ The script saves fused PNG images and reports EN, SD, SF, MI, SCD, VIF, Qabf, an
 
 ## Figure Gallery
 
-The remaining paper figures are collected below without repeating the key results shown above.
+The remaining paper figures are shown below in a full-width, single-column layout without repeating the figures above.
 
-| | |
-|:--:|:--:|
-| <img src="assets/figures/wang02.webp" width="100%" alt="Prompt-guided prototype routing"> | <img src="assets/figures/wang03.webp" width="100%" alt="Overall architecture"> |
-| **Prompt-guided prototype routing** | **Overall architecture** |
-| <img src="assets/figures/wang04.webp" width="100%" alt="Base-detail encoder"> | <img src="assets/figures/wang05.webp" width="100%" alt="Base fusion layer"> |
-| **Mamba-based base-detail encoder** | **Reliability-aware base fusion** |
-| <img src="assets/figures/wang06.webp" width="100%" alt="Detail fusion layer"> | <img src="assets/figures/wang07.webp" width="100%" alt="Orthogonal prototype regularization"> |
-| **Detail fusion layer** | **Orthogonal prototype regularization** |
-| <img src="assets/figures/wang09.webp" width="100%" alt="RoadScene qualitative results"> | <img src="assets/figures/wang10.webp" width="100%" alt="TNO qualitative results"> |
-| **RoadScene qualitative comparison** | **TNO qualitative comparison** |
-| <img src="assets/figures/wang13.webp" width="100%" alt="Prototype response analysis"> | <img src="assets/figures/wang14.webp" width="100%" alt="Reliability under corruptions"> |
-| **Prototype-response analysis** | **Reliability under controlled corruptions** |
-| <img src="assets/figures/wang15.webp" width="100%" alt="Parameter sensitivity"> | <img src="assets/figures/wang16.webp" width="100%" alt="Power spectral density"> |
-| **Parameter sensitivity** | **Power spectral density** |
+<p align="center">
+  <img src="assets/figures/wang03.webp" width="100%" alt="Overall architecture">
+  <br><sub><b>Overall architecture of PromptRoute-Mamba.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang05.webp" width="100%" alt="Base fusion layer">
+  <br><sub><b>Reliability-aware base fusion layer.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang06.webp" width="100%" alt="Detail fusion layer">
+  <br><sub><b>Detail fusion layer.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang07.webp" width="100%" alt="Orthogonal prototype regularization">
+  <br><sub><b>Orthogonal prototype regularization.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang09.webp" width="100%" alt="RoadScene qualitative results">
+  <br><sub><b>RoadScene qualitative comparison.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang10.webp" width="100%" alt="TNO qualitative results">
+  <br><sub><b>TNO qualitative comparison.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang13.webp" width="100%" alt="Prototype response analysis">
+  <br><sub><b>Prototype-response analysis.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang14.webp" width="100%" alt="Reliability under corruptions">
+  <br><sub><b>Reliability under controlled corruptions.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang15.webp" width="100%" alt="Parameter sensitivity">
+  <br><sub><b>Parameter sensitivity analysis.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang16.webp" width="100%" alt="Power spectral density">
+  <br><sub><b>Power spectral density analysis.</b></sub>
+</p>
 
 ## Repository Layout
 
