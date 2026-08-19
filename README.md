@@ -11,7 +11,7 @@
 
 Official implementation of **PromptRoute-Mamba**, a progressive cross-modal reliability reasoning network for infrared-visible image fusion.
 
-[Overview](#overview) · [Datasets](#datasets) · [Training](#training) · [Testing](#testing) · [Figure Gallery](#figure-gallery) · [Citation](#citation)
+[Overview](#overview) · [Datasets](#datasets) · [Training](#training) · [Testing](#testing) · [Key Results](#key-experimental-results) · [Figure Gallery](#figure-gallery) · [Citation](#citation)
 
 </div>
 
@@ -101,6 +101,38 @@ python test_IVF.py \
 ```
 
 The script saves fused PNG images and reports EN, SD, SF, MI, SCD, VIF, Qabf, and SSIM. Add `--no-metrics` when only fused images are needed.
+
+## Key Experimental Results
+
+<p align="center">
+  <img src="assets/figures/wang01.webp" width="96%" alt="Performance and complexity comparison">
+  <br><sub><b>Performance-complexity comparison on MSRS and RoadScene.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang08.webp" width="100%" alt="MSRS qualitative comparison">
+  <br><sub><b>Qualitative comparison on representative MSRS image pairs.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang11.webp" width="100%" alt="LLVIP zero-shot qualitative comparison">
+  <br><sub><b>Zero-shot qualitative comparison on the low-light LLVIP dataset.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang12.webp" width="100%" alt="Qualitative ablation analysis">
+  <br><sub><b>Qualitative ablation analysis of the principal model components.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang17.webp" width="100%" alt="M3FD object detection comparison">
+  <br><sub><b>Downstream object detection comparison on M3FD.</b></sub>
+</p>
+
+<p align="center">
+  <img src="assets/figures/wang18.webp" width="100%" alt="MSRS semantic segmentation comparison">
+  <br><sub><b>Downstream semantic segmentation comparison on MSRS.</b></sub>
+</p>
 
 ## Figure Gallery
 
