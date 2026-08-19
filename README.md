@@ -136,28 +136,22 @@ The script saves fused PNG images and reports EN, SD, SF, MI, SCD, VIF, Qabf, an
 
 ## Figure Gallery
 
-All figures from the paper are included below in a compact gallery.
+The remaining paper figures are collected below without repeating the key results shown above.
 
 | | |
 |:--:|:--:|
-| <img src="assets/figures/wang01.webp" width="100%" alt="Performance and complexity comparison"> | <img src="assets/figures/wang02.webp" width="100%" alt="Prompt-guided prototype routing"> |
-| **Performance-complexity comparison** | **Prompt-guided prototype routing** |
-| <img src="assets/figures/wang03.webp" width="100%" alt="Overall architecture"> | <img src="assets/figures/wang04.webp" width="100%" alt="Base-detail encoder"> |
-| **Overall architecture** | **Mamba-based base-detail encoder** |
-| <img src="assets/figures/wang05.webp" width="100%" alt="Base fusion layer"> | <img src="assets/figures/wang06.webp" width="100%" alt="Detail fusion layer"> |
-| **Reliability-aware base fusion** | **Detail fusion layer** |
-| <img src="assets/figures/wang07.webp" width="100%" alt="Orthogonal prototype regularization"> | <img src="assets/figures/wang08.webp" width="100%" alt="MSRS qualitative results"> |
-| **Orthogonal prototype regularization** | **MSRS qualitative comparison** |
+| <img src="assets/figures/wang02.webp" width="100%" alt="Prompt-guided prototype routing"> | <img src="assets/figures/wang03.webp" width="100%" alt="Overall architecture"> |
+| **Prompt-guided prototype routing** | **Overall architecture** |
+| <img src="assets/figures/wang04.webp" width="100%" alt="Base-detail encoder"> | <img src="assets/figures/wang05.webp" width="100%" alt="Base fusion layer"> |
+| **Mamba-based base-detail encoder** | **Reliability-aware base fusion** |
+| <img src="assets/figures/wang06.webp" width="100%" alt="Detail fusion layer"> | <img src="assets/figures/wang07.webp" width="100%" alt="Orthogonal prototype regularization"> |
+| **Detail fusion layer** | **Orthogonal prototype regularization** |
 | <img src="assets/figures/wang09.webp" width="100%" alt="RoadScene qualitative results"> | <img src="assets/figures/wang10.webp" width="100%" alt="TNO qualitative results"> |
 | **RoadScene qualitative comparison** | **TNO qualitative comparison** |
-| <img src="assets/figures/wang11.webp" width="100%" alt="LLVIP qualitative results"> | <img src="assets/figures/wang12.webp" width="100%" alt="Qualitative ablation analysis"> |
-| **LLVIP qualitative comparison** | **Qualitative ablation analysis** |
 | <img src="assets/figures/wang13.webp" width="100%" alt="Prototype response analysis"> | <img src="assets/figures/wang14.webp" width="100%" alt="Reliability under corruptions"> |
 | **Prototype-response analysis** | **Reliability under controlled corruptions** |
 | <img src="assets/figures/wang15.webp" width="100%" alt="Parameter sensitivity"> | <img src="assets/figures/wang16.webp" width="100%" alt="Power spectral density"> |
 | **Parameter sensitivity** | **Power spectral density** |
-| <img src="assets/figures/wang17.webp" width="100%" alt="M3FD object detection"> | <img src="assets/figures/wang18.webp" width="100%" alt="MSRS semantic segmentation"> |
-| **M3FD object detection** | **MSRS semantic segmentation** |
 
 ## Repository Layout
 
